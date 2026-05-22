@@ -1,0 +1,14 @@
+---
+# The list of WireGuard peers allowed to connect to the dev server.
+#
+# Adding yourself:
+#   1. Run playbooks/client.yml on your laptop; it prints your public key.
+#   2. Append a {name, public_key, address} entry below, using the next
+#      free address in 172.23.0.0/16. The server playbook asserts
+#      uniqueness — pick one that isn't already taken.
+#   3. Open a PR. Once merged, the admin re-runs playbooks/server.yml.
+
+wg_server_peers: []
+#  - name: daryl
+#    public_key: BASE64_PUBKEY
+#    address: 172.23.0.2

@@ -1,0 +1,14 @@
+---
+- name: Configure this host as the WireGuard server
+  hosts: localhost
+  become: true
+  gather_facts: true
+  vars_files:
+    - ../peers.yml
+  # To enable forwarding into a downstream network, override role defaults
+  # by adding a `vars:` block here, e.g.:
+  #   vars:
+  #     wg_server_forward_enabled: true
+  #     wg_server_forward_egress_iface: eth0
+  roles:
+    - wg_server

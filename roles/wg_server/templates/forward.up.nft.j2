@@ -1,0 +1,9 @@
+{{ ansible_managed | comment(decoration='# ') }}
+# Loaded by wg-quick PostUp. Teardown: `nft delete table inet wireguard`.
+add table inet wireguard
+flush table inet wireguard
+add chain inet wireguard forward { type filter hook forward priority filter; }
+add chain inet wireguard postrouting { type nat hook postrouting priority srcnat; }
+add rule inet wireguard forward iifname "{{ wg_server_interface }}" accept
+add rule inet wireguard forward oifname "{{ wg_server_interface }}" accept
+add rule inet wireguard postrouting oifname "{{ wg_server_forward_egress_iface }}" masquerade

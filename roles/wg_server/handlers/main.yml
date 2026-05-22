@@ -1,0 +1,5 @@
+---
+- name: Restart wg-quick service
+  ansible.builtin.systemd:
+    name: "wg-quick@{{ wg_server_interface }}.service"
+    state: restarted

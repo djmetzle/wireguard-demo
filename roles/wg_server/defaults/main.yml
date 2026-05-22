@@ -1,0 +1,18 @@
+---
+wg_server_interface: wg0
+wg_server_listen_port: 51820
+wg_server_config_dir: /etc/wireguard
+
+# Server's address inside the tunnel, and the tunnel's full network.
+wg_server_address: 172.23.0.1
+wg_server_network_prefix: 16
+wg_server_network_cidr: "172.23.0.0/16"
+
+# Peers — list of {name, public_key, address}
+wg_server_peers: []
+
+# Forwarding into a downstream network (e.g. a private VPC).
+# When enabled: the server turns on ip_forward and the wg0 interface
+# adds PostUp/PostDown rules to MASQUERADE traffic out of egress_iface.
+wg_server_forward_enabled: false
+wg_server_forward_egress_iface: ""

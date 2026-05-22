@@ -1,0 +1,10 @@
+---
+wg_client_interface: wg0
+wg_client_config_dir: /etc/wireguard
+wg_client_network_prefix: 32
+wg_client_persistent_keepalive: 25
+
+# Networks the client routes through the tunnel.
+# Default: only the tunnel itself. Extend (e.g. add a VPC CIDR) to reach more.
+wg_client_allowed_ips:
+  - 172.23.0.0/16

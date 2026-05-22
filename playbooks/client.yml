@@ -1,0 +1,13 @@
+---
+# Run on a developer laptop to bring up the client side of the VPN.
+#
+# Required vars (set in inventory/host_vars/localhost.yml or via -e):
+#   wg_client_address     # the tunnel address the server assigned to you
+#   wg_server_public_key  # base64 pubkey, ask the server admin
+#   wg_server_endpoint    # public host:port of the dev server
+- name: Configure this host as a WireGuard client
+  hosts: localhost
+  become: true
+  gather_facts: true
+  roles:
+    - wg_client

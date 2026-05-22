@@ -1,0 +1,85 @@
+---
+- name: Refuse to run on non-Fedora hosts
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Fedora'
+    fail_msg: >-
+      wg_client role targets Fedora. Detected
+      {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
+
+- name: Validate required client vars
+  ansible.builtin.assert:
+    that:
+      - wg_client_address is defined and wg_client_address | length > 0
+      - wg_server_public_key is defined and wg_server_public_key | length > 0
+      - wg_server_endpoint is defined and wg_server_endpoint | length > 0
+    fail_msg: >-
+      Set wg_client_address, wg_server_public_key, and wg_server_endpoint
+      (via -e or a vars_files entry on playbooks/client.yml).
+
+- name: Install wireguard-tools
+  ansible.builtin.dnf:
+    name: wireguard-tools
+    state: present
+
+- name: Ensure /etc/wireguard exists with strict perms
+  ansible.builtin.file:
+    path: "{{ wg_client_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Generate client keypair if absent
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 077
+    wg genkey | tee {{ wg_client_config_dir }}/privatekey | wg pubkey > {{ wg_client_config_dir }}/publickey
+  args:
+    creates: "{{ wg_client_config_dir }}/privatekey"
+    executable: /bin/bash
+
+- name: Enforce permissions on key files
+  ansible.builtin.file:
+    path: "{{ wg_client_config_dir }}/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { name: privatekey, mode: '0600' }
+    - { name: publickey, mode: '0644' }
+
+- name: Read client private key
+  ansible.builtin.slurp:
+    src: "{{ wg_client_config_dir }}/privatekey"
+  register: _wg_client_priv
+  no_log: true
+
+- name: Read client public key
+  ansible.builtin.slurp:
+    src: "{{ wg_client_config_dir }}/publickey"
+  register: _wg_client_pub
+
+- name: Render config for {{ wg_client_interface }}
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: "{{ wg_client_config_dir }}/{{ wg_client_interface }}.conf"
+    owner: root
+    group: root
+    mode: '0600'
+  vars:
+    wg_client_private_key: "{{ _wg_client_priv.content | b64decode | trim }}"
+  no_log: true
+  notify: Restart wg-quick service
+
+- name: Enable and start wg-quick@{{ wg_client_interface }}
+  ansible.builtin.systemd:
+    name: "wg-quick@{{ wg_client_interface }}.service"
+    enabled: true
+    state: started
+
+- name: Show this client's public key (give to server admin)
+  ansible.builtin.debug:
+    msg:
+      - "Public key: {{ _wg_client_pub.content | b64decode | trim }}"
+      - "Assigned tunnel address: {{ wg_client_address }}"

@@ -1,0 +1,17 @@
+{{ ansible_managed | comment }}
+[Interface]
+Address = {{ wg_server_address }}/{{ wg_server_network_prefix }}
+ListenPort = {{ wg_server_listen_port }}
+PrivateKey = {{ wg_server_private_key }}
+{% if wg_server_forward_enabled %}
+PostUp   = nft -f {{ wg_server_config_dir }}/forward.up.nft
+PostDown = nft delete table inet wireguard
+{% endif %}
+
+{% for peer in wg_server_peers %}
+# {{ peer.name }}
+[Peer]
+PublicKey = {{ peer.public_key }}
+AllowedIPs = {{ peer.address }}/32
+
+{% endfor %}

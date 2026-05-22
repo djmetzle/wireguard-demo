@@ -1,0 +1,7 @@
+---
+- name: Verify Ansible can drive this host
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Ping
+      ansible.builtin.ping:

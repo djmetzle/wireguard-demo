@@ -1,0 +1,103 @@
+---
+- name: Refuse to run on non-Fedora hosts
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Fedora'
+    fail_msg: >-
+      wg_server role targets Fedora. Detected
+      {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}.
+
+- name: Install wireguard-tools
+  ansible.builtin.dnf:
+    name: wireguard-tools
+    state: present
+
+- name: Validate forwarding config
+  ansible.builtin.assert:
+    that:
+      - wg_server_forward_egress_iface | length > 0
+    fail_msg: "wg_server_forward_enabled is true but wg_server_forward_egress_iface is unset."
+  when: wg_server_forward_enabled
+
+- name: Validate peer tunnel addresses are unique
+  ansible.builtin.assert:
+    that:
+      - (wg_server_peers | map(attribute='address') | list | length)
+        == (wg_server_peers | map(attribute='address') | unique | list | length)
+    fail_msg: "Duplicate tunnel addresses in wg_server_peers: {{ wg_server_peers | map(attribute='address') | list }}"
+
+- name: Persist net.ipv4.ip_forward
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "{{ '1' if wg_server_forward_enabled else '0' }}"
+    sysctl_file: /etc/sysctl.d/99-wireguard.conf
+    state: present
+    reload: true
+
+- name: Ensure /etc/wireguard exists with strict perms
+  ansible.builtin.file:
+    path: "{{ wg_server_config_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Generate server keypair if absent
+  ansible.builtin.shell: |
+    set -euo pipefail
+    umask 077
+    wg genkey | tee {{ wg_server_config_dir }}/privatekey | wg pubkey > {{ wg_server_config_dir }}/publickey
+  args:
+    creates: "{{ wg_server_config_dir }}/privatekey"
+    executable: /bin/bash
+
+- name: Enforce permissions on key files
+  ansible.builtin.file:
+    path: "{{ wg_server_config_dir }}/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "{{ item.mode }}"
+  loop:
+    - { name: privatekey, mode: '0600' }
+    - { name: publickey, mode: '0644' }
+
+- name: Render nft forwarding script
+  ansible.builtin.template:
+    src: forward.up.nft.j2
+    dest: "{{ wg_server_config_dir }}/forward.up.nft"
+    owner: root
+    group: root
+    mode: '0600'
+  when: wg_server_forward_enabled
+  notify: Restart wg-quick service
+
+- name: Remove nft forwarding script when forwarding disabled
+  ansible.builtin.file:
+    path: "{{ wg_server_config_dir }}/forward.up.nft"
+    state: absent
+  when: not wg_server_forward_enabled
+  notify: Restart wg-quick service
+
+- name: Read server private key
+  ansible.builtin.slurp:
+    src: "{{ wg_server_config_dir }}/privatekey"
+  register: _wg_server_priv
+  no_log: true
+
+- name: Render config for {{ wg_server_interface }}
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: "{{ wg_server_config_dir }}/{{ wg_server_interface }}.conf"
+    owner: root
+    group: root
+    mode: '0600'
+  vars:
+    wg_server_private_key: "{{ _wg_server_priv.content | b64decode | trim }}"
+  no_log: true
+  notify: Restart wg-quick service
+
+- name: Enable and start wg-quick@{{ wg_server_interface }}
+  ansible.builtin.systemd:
+    name: "wg-quick@{{ wg_server_interface }}.service"
+    enabled: true
+    state: started
